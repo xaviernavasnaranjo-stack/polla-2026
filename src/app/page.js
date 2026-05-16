@@ -141,7 +141,7 @@ export default function Page() {
             {tab==='tabla'       && <TablaTab leaderboard={leaderboard} participant={participant}/>}
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
-{tab==='grupos-clasif' && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}            
+{tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}            
 {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
@@ -231,6 +231,82 @@ function TablaTab({ leaderboard, participant }) {
 }
 
 // ─── GRUPOS TAB (public view of group matches + results) ─────────────────────
+function ClasificadosTab({ db, adminMode, onRefresh }) {
+  const [local, setLocal]   = useState({})
+  const [saving, setSaving] = useState(null)
+  const [flash, setFlash]   = useState(null)
+
+  useEffect(()=>{ 
+    const lc = {}
+    db.classifiedRes.forEach(r => { lc[r.group_id]={first:r.first_place,second:r.second_place} })
+    setLocal(lc)
+  },[db.classifiedRes])
+
+  const save = async (g) => {
+    const lc = local[g]; if (!lc) return
+    setSaving(g)
+    const existing = db.classifiedRes.find(r=>r.group_id===g)
+    if (existing) await supabase.from('classified_results').update({first_place:lc.first,second_place:lc.second}).eq('id',existing.id)
+    else await supabase.from('classified_results').insert({group_id:g,first_place:lc.first,second_place:lc.second})
+    await onRefresh(); setSaving(null); setFlash(g); setTimeout(()=>setFlash(null),1500)
+  }
+
+  return (
+    <div className={s.tabContent}>
+      <h2 className={s.sectionTitle}>📊 Clasificados por Grupo</h2>
+      {adminMode && <div className={s.adminBanner}>⚙️ Ingresa los equipos que clasificaron de cada grupo</div>}
+      <div className={s.groupsGrid}>
+        {GROUPS.map(g => {
+          const teams = GROUP_TEAMS[g]
+          const val   = local[g]||{first:'',second:''}
+          const gc    = GROUP_COLORS[g]
+          return (
+            <div key={g} className={s.groupCard} style={{borderColor:gc}}>
+              <div className={s.groupCardHeader} style={{background:gc}}>
+                <span className={s.groupLetter}>GRUPO {g}</span>
+              </div>
+              <div className={s.groupTeams}>
+                {teams.map(t=>(
+                  <div key={t} className={s.teamRow} style={{
+                    background:val.first===t?'rgba(29,185,84,.12)':val.second===t?'rgba(46,107,230,.12)':'transparent',
+                    borderColor:val.first===t?'#1DB954':val.second===t?'#2E6BE6':'transparent',
+                  }}>
+                    {val.first===t&&<span className={s.placeTag} style={{background:'#1DB954'}}>1°</span>}
+                    {val.second===t&&<span className={s.placeTag} style={{background:'#2E6BE6'}}>2°</span>}
+                    {val.first!==t&&val.second!==t&&<span className={s.placeTagEmpty}/>}
+                    <span className={s.teamRowName}>{t}</span>
+                  </div>
+                ))}
+              </div>
+              {adminMode && (
+                <div className={s.groupAdminControls}>
+                  <div className={s.groupSelectRow}>
+                    <span style={{color:'#1DB954',fontWeight:700,minWidth:20}}>1°</span>
+                    <select value={val.first||''} onChange={e=>setLocal(p=>({...p,[g]:{...val,first:e.target.value}}))} className={s.classifSelect}>
+                      <option value="">—</option>
+                      {teams.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className={s.groupSelectRow}>
+                    <span style={{color:'#2E6BE6',fontWeight:700,minWidth:20}}>2°</span>
+                    <select value={val.second||''} onChange={e=>setLocal(p=>({...p,[g]:{...val,second:e.target.value}}))} className={s.classifSelect}>
+                      <option value="">—</option>
+                      {teams.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <button className={s.classifSaveBtn} onClick={()=>save(g)} disabled={saving===g}
+                    style={{background:flash===g?'#1DB954':gc}}>
+                    {flash===g?'✓ Guardado':saving===g?'...':'Guardar'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 function GruposTab({ db, adminMode, onRefresh }) {
   const [filter, setFilter] = useState('ALL')
   const [editRes, setEditRes] = useState({})
