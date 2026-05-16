@@ -86,6 +86,7 @@ export default function Page() {
     { id:'tabla',     label:'🏆 Tabla' },
     { id:'grupos',    label:'⚽ Fase de Grupos' },
     { id:'playoff',   label:'🔥 Playoffs' },
+{ id:'grupos-clasif', label:'📊 Clasificados' },
     ...(participant ? [{ id:'mis-grupos', label:'📋 Mis Grupos' }, { id:'mis-playoffs', label:'🎯 Mis Playoffs' }] : []),
     ...(adminMode   ? [{ id:'admin',      label:'⚙️ Admin' }] : []),
   ]
@@ -140,7 +141,8 @@ export default function Page() {
             {tab==='tabla'       && <TablaTab leaderboard={leaderboard} participant={participant}/>}
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
-            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
+{tab==='grupos-clasif' && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}            
+{tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
@@ -237,15 +239,25 @@ function GruposTab({ db, adminMode, onRefresh }) {
   const getResult = id => db.groupResults.find(r => r.match_id === id)
   const filtered  = filter==='ALL' ? MATCHES : MATCHES.filter(m => m.group===filter)
 
-  const saveResult = async (matchId) => {
-    const ed = editRes[matchId]; if (!ed) return
-    setSaving(matchId)
-    const existing = getResult(matchId)
-    if (existing) await supabase.from('match_results').update({home_score:ed.home??existing.home_score, away_score:ed.away??existing.away_score}).eq('match_id',matchId)
-    else await supabase.from('match_results').insert({match_id:matchId, home_score:ed.home??0, away_score:ed.away??0})
-    setEditRes(p => { const n={...p}; delete n[matchId]; return n })
-    await onRefresh(); setSaving(false)
+const saveResult = async (matchId) => {
+  const ed = editRes[matchId]; if (!ed) return
+  setSaving(matchId)
+  const existing = getResult(matchId)
+  if (ed.home === null && ed.away === null) {
+    if (existing) await supabase.from('match_results').delete().eq('match_id', matchId)
+  } else if (existing) {
+    await supabase.from('match_results').update({
+      home_score: ed.home ?? existing.home_score,
+      away_score: ed.away ?? existing.away_score,
+    }).eq('match_id', matchId)
+  } else {
+    await supabase.from('match_results').insert({
+      match_id: matchId, home_score: ed.home ?? 0, away_score: ed.away ?? 0,
+    })
   }
+  setEditRes(p => { const n={...p}; delete n[matchId]; return n })
+  await onRefresh(); setSaving(false)
+}
 
   return (
     <div className={s.tabContent}>
