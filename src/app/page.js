@@ -793,6 +793,11 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
         </div>
       </div>
 
+{!db.openMatches.includes(999) && (
+  <div className={s.adminBanner} style={{background:'rgba(232,50,74,.08)',borderColor:'rgba(232,50,74,.2)',color:'#E8324A'}}>
+    🔒 El pronóstico de campeón está cerrado en este momento.
+  </div>
+)}
       {/* Round tabs */}
       <div className={s.filterRow}>
         {KNOCKOUT_ROUNDS.map(r => (
@@ -901,13 +906,14 @@ function AdminTab({ db, leaderboard, onRefresh }) {
   }
 
   // All matches (group + knockout) for open/close control
-  const allMatches = [
+const allMatches = [
     ...MATCHES.map(m=>({...m, phase:'grupos', roundLabel:`Grupo ${m.group}`})),
     ...KNOCKOUT_MATCHES.map(m=>({
       ...m, phase:'playoff',
       roundLabel: KNOCKOUT_ROUNDS.find(r=>r.id===m.round)?.label||m.round,
       home: m.label.split(' vs ')[0], away: m.label.split(' vs ')[1]||'',
-    }))
+    })),
+    { id:999, phase:'bonus', roundLabel:'🏆 Bonus Campeón', home:'Pronóstico', away:'Campeón/2°/3°', date:'' }
   ]
 
   // Email: build mailto link with all participant emails
@@ -1020,13 +1026,12 @@ function AdminTab({ db, leaderboard, onRefresh }) {
             </div>
           </div>
           <p style={{color:'var(--muted)',fontSize:13,marginBottom:16}}>Abre los partidos antes de cada fase para que los participantes puedan pronosticar. Ciérralos cuando empiece el partido.</p>
-          {['grupos','playoff'].map(phase => {
+{['grupos','playoff','bonus'].map(phase => {
             const phaseMatches = allMatches.filter(m=>m.phase===phase)
             const rounds = [...new Set(phaseMatches.map(m=>m.roundLabel))]
             return (
               <div key={phase}>
-                <div className={s.phaseLabel}>{phase==='grupos'?'⚽ FASE DE GRUPOS':'🔥 FASE ELIMINATORIA'}</div>
-                {rounds.map(round => {
+<div className={s.phaseLabel}>{phase==='grupos'?'⚽ FASE DE GRUPOS':phase==='playoff'?'🔥 FASE ELIMINATORIA':'🏆 BONUS CAMPEÓN'}</div>                {rounds.map(round => {
                   const rMatches = phaseMatches.filter(m=>m.roundLabel===round)
                   const allOpen  = rMatches.every(m=>localOpen.includes(m.id))
                   return (
