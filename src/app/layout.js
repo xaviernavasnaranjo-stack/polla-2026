@@ -1,7 +1,7 @@
 import './globals.css'
 
 export const metadata = {
-  title: '⚽ Polla Mundialista 2026 - NAVAS ROMERO',
+  title: '⚽ Polla Mundialista 2026 - Navas Romero',
   description: 'FIFA World Cup 2026 · USA · Canada · Mexico',
   icons: { icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚽</text></svg>' },
 }
