@@ -86,7 +86,6 @@ export default function Page() {
     { id:'tabla',     label:'🏆 Tabla' },
     { id:'grupos',    label:'⚽ Fase de Grupos' },
     { id:'playoff',   label:'🔥 Playoffs' },
-{ id:'grupos-clasif', label:'📊 Clasificados' },
     ...(participant ? [{ id:'mis-grupos', label:'📋 Mis Grupos' }, { id:'mis-playoffs', label:'🎯 Mis Playoffs' }] : []),
     ...(adminMode   ? [{ id:'admin',      label:'⚙️ Admin' }] : []),
   ]
@@ -141,8 +140,7 @@ export default function Page() {
             {tab==='tabla'       && <TablaTab leaderboard={leaderboard} participant={participant}/>}
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
-{tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}            
-{tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
+            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
@@ -231,82 +229,6 @@ function TablaTab({ leaderboard, participant }) {
 }
 
 // ─── GRUPOS TAB (public view of group matches + results) ─────────────────────
-function ClasificadosTab({ db, adminMode, onRefresh }) {
-  const [local, setLocal]   = useState({})
-  const [saving, setSaving] = useState(null)
-  const [flash, setFlash]   = useState(null)
-
-  useEffect(()=>{ 
-    const lc = {}
-    db.classifiedRes.forEach(r => { lc[r.group_id]={first:r.first_place,second:r.second_place} })
-    setLocal(lc)
-  },[db.classifiedRes])
-
-  const save = async (g) => {
-    const lc = local[g]; if (!lc) return
-    setSaving(g)
-    const existing = db.classifiedRes.find(r=>r.group_id===g)
-    if (existing) await supabase.from('classified_results').update({first_place:lc.first,second_place:lc.second}).eq('id',existing.id)
-    else await supabase.from('classified_results').insert({group_id:g,first_place:lc.first,second_place:lc.second})
-    await onRefresh(); setSaving(null); setFlash(g); setTimeout(()=>setFlash(null),1500)
-  }
-
-  return (
-    <div className={s.tabContent}>
-      <h2 className={s.sectionTitle}>📊 Clasificados por Grupo</h2>
-      {adminMode && <div className={s.adminBanner}>⚙️ Ingresa los equipos que clasificaron de cada grupo</div>}
-      <div className={s.groupsGrid}>
-        {GROUPS.map(g => {
-          const teams = GROUP_TEAMS[g]
-          const val   = local[g]||{first:'',second:''}
-          const gc    = GROUP_COLORS[g]
-          return (
-            <div key={g} className={s.groupCard} style={{borderColor:gc}}>
-              <div className={s.groupCardHeader} style={{background:gc}}>
-                <span className={s.groupLetter}>GRUPO {g}</span>
-              </div>
-              <div className={s.groupTeams}>
-                {teams.map(t=>(
-                  <div key={t} className={s.teamRow} style={{
-                    background:val.first===t?'rgba(29,185,84,.12)':val.second===t?'rgba(46,107,230,.12)':'transparent',
-                    borderColor:val.first===t?'#1DB954':val.second===t?'#2E6BE6':'transparent',
-                  }}>
-                    {val.first===t&&<span className={s.placeTag} style={{background:'#1DB954'}}>1°</span>}
-                    {val.second===t&&<span className={s.placeTag} style={{background:'#2E6BE6'}}>2°</span>}
-                    {val.first!==t&&val.second!==t&&<span className={s.placeTagEmpty}/>}
-                    <span className={s.teamRowName}>{t}</span>
-                  </div>
-                ))}
-              </div>
-              {adminMode && (
-                <div className={s.groupAdminControls}>
-                  <div className={s.groupSelectRow}>
-                    <span style={{color:'#1DB954',fontWeight:700,minWidth:20}}>1°</span>
-                    <select value={val.first||''} onChange={e=>setLocal(p=>({...p,[g]:{...val,first:e.target.value}}))} className={s.classifSelect}>
-                      <option value="">—</option>
-                      {teams.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className={s.groupSelectRow}>
-                    <span style={{color:'#2E6BE6',fontWeight:700,minWidth:20}}>2°</span>
-                    <select value={val.second||''} onChange={e=>setLocal(p=>({...p,[g]:{...val,second:e.target.value}}))} className={s.classifSelect}>
-                      <option value="">—</option>
-                      {teams.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <button className={s.classifSaveBtn} onClick={()=>save(g)} disabled={saving===g}
-                    style={{background:flash===g?'#1DB954':gc}}>
-                    {flash===g?'✓ Guardado':saving===g?'...':'Guardar'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 function GruposTab({ db, adminMode, onRefresh }) {
   const [filter, setFilter] = useState('ALL')
   const [editRes, setEditRes] = useState({})
@@ -315,25 +237,25 @@ function GruposTab({ db, adminMode, onRefresh }) {
   const getResult = id => db.groupResults.find(r => r.match_id === id)
   const filtered  = filter==='ALL' ? MATCHES : MATCHES.filter(m => m.group===filter)
 
-const saveResult = async (matchId) => {
-  const ed = editRes[matchId]; if (!ed) return
-  setSaving(matchId)
-  const existing = getResult(matchId)
-  if (ed.home === null && ed.away === null) {
-    if (existing) await supabase.from('match_results').delete().eq('match_id', matchId)
-  } else if (existing) {
-    await supabase.from('match_results').update({
-      home_score: ed.home ?? existing.home_score,
-      away_score: ed.away ?? existing.away_score,
-    }).eq('match_id', matchId)
-  } else {
-    await supabase.from('match_results').insert({
-      match_id: matchId, home_score: ed.home ?? 0, away_score: ed.away ?? 0,
-    })
+  const saveResult = async (matchId) => {
+    const ed = editRes[matchId]; if (!ed) return
+    setSaving(matchId)
+    const existing = getResult(matchId)
+    if (ed.home === null && ed.away === null) {
+      if (existing) await supabase.from('match_results').delete().eq('match_id', matchId)
+    } else if (existing) {
+      await supabase.from('match_results').update({
+        home_score: ed.home ?? existing.home_score,
+        away_score: ed.away ?? existing.away_score,
+      }).eq('match_id', matchId)
+    } else {
+      await supabase.from('match_results').insert({
+        match_id: matchId, home_score: ed.home ?? 0, away_score: ed.away ?? 0,
+      })
+    }
+    setEditRes(p => { const n={...p}; delete n[matchId]; return n })
+    await onRefresh(); setSaving(false)
   }
-  setEditRes(p => { const n={...p}; delete n[matchId]; return n })
-  await onRefresh(); setSaving(false)
-}
 
   return (
     <div className={s.tabContent}>
@@ -578,6 +500,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
 
   const saveClasif = async (g) => {
     const lc = localClassif[g]; if (!lc) return
+    if (!db.openMatches.includes(998)) return
     setSaving(`c-${g}`)
     const existing = db.classifiedPreds.find(c => c.group_id===g && c.participant_id===participant.id)
     if (existing) await supabase.from('classified_predictions').update({first_place:lc.first,second_place:lc.second}).eq('id',existing.id)
@@ -632,9 +555,9 @@ function MisGruposTab({ db, participant, onRefresh }) {
                       {(place==='first'?hit1:hit2) && <span className={s.hitBadge}>+3</span>}
                     </div>
                   ))}
-                  <button className={s.classifSaveBtn} onClick={()=>saveClasif(g)} disabled={saving===`c-${g}`}
-                    style={{background:flash===`c-${g}`?'#1DB954':gc}}>
-                    {flash===`c-${g}`?'✓ Guardado':saving===`c-${g}`?'...':'Guardar'}
+                  <button className={s.classifSaveBtn} onClick={()=>saveClasif(g)} disabled={saving===`c-${g}` || !db.openMatches.includes(998)}
+                    style={{background:flash===`c-${g}`?'#1DB954':!db.openMatches.includes(998)?'#555':gc}}>
+                    {flash===`c-${g}`?'✓ Guardado':!db.openMatches.includes(998)?'🔒 Cerrado':saving===`c-${g}`?'...':'Guardar'}
                   </button>
                 </div>
               </div>
@@ -779,7 +702,7 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
               <div key={key} className={s.champCard} style={{borderColor:color}}>
                 <div className={s.champCardLabel} style={{color}}>{label} <span style={{fontSize:11}}>+{pts}pts</span></div>
                 {hit && <div className={s.hitBadge} style={{marginBottom:4}}>+{pts} ✓</div>}
-                <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))} disabled={!db.openMatches.includes(999)}
+                <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))}
                   placeholder="Nombre del equipo..." className={s.champInput}/>
               </div>
             )
@@ -793,11 +716,6 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
         </div>
       </div>
 
-{!db.openMatches.includes(999) && (
-  <div className={s.adminBanner} style={{background:'rgba(232,50,74,.08)',borderColor:'rgba(232,50,74,.2)',color:'#E8324A'}}>
-    🔒 El pronóstico de campeón está cerrado en este momento.
-  </div>
-)}
       {/* Round tabs */}
       <div className={s.filterRow}>
         {KNOCKOUT_ROUNDS.map(r => (
@@ -906,14 +824,15 @@ function AdminTab({ db, leaderboard, onRefresh }) {
   }
 
   // All matches (group + knockout) for open/close control
-const allMatches = [
+  const allMatches = [
     ...MATCHES.map(m=>({...m, phase:'grupos', roundLabel:`Grupo ${m.group}`})),
     ...KNOCKOUT_MATCHES.map(m=>({
       ...m, phase:'playoff',
       roundLabel: KNOCKOUT_ROUNDS.find(r=>r.id===m.round)?.label||m.round,
       home: m.label.split(' vs ')[0], away: m.label.split(' vs ')[1]||'',
     })),
-    { id:999, phase:'bonus', roundLabel:'🏆 Bonus Campeón', home:'Pronóstico', away:'Campeón/2°/3°', date:'' }
+    { id:998, phase:'clasif', roundLabel:'📊 Clasificados de Grupo', home:'Pronóstico', away:'1° y 2° por grupo', date:'' },
+    { id:999, phase:'bonus', roundLabel:'🏆 Bonus Campeón', home:'Pronóstico', away:'Campeón/2°/3°', date:'' },
   ]
 
   // Email: build mailto link with all participant emails
@@ -1026,17 +945,18 @@ const allMatches = [
             </div>
           </div>
           <p style={{color:'var(--muted)',fontSize:13,marginBottom:16}}>Abre los partidos antes de cada fase para que los participantes puedan pronosticar. Ciérralos cuando empiece el partido.</p>
-{['grupos','playoff','bonus'].map(phase => {
+          {['grupos','playoff','clasif','bonus'].map(phase => {
             const phaseMatches = allMatches.filter(m=>m.phase===phase)
             const rounds = [...new Set(phaseMatches.map(m=>m.roundLabel))]
             return (
               <div key={phase}>
-<div className={s.phaseLabel}>{phase==='grupos'?'⚽ FASE DE GRUPOS':phase==='playoff'?'🔥 FASE ELIMINATORIA':'🏆 BONUS CAMPEÓN'}</div>                {rounds.map(round => {
+                <div className={s.phaseLabel}>{phase==='grupos'?'⚽ FASE DE GRUPOS':phase==='playoff'?'🔥 FASE ELIMINATORIA':phase==='clasif'?'📊 CLASIFICADOS DE GRUPO':'🏆 BONUS CAMPEÓN'}</div>
+                {rounds.map(round => {
                   const rMatches = phaseMatches.filter(m=>m.roundLabel===round)
                   const allOpen  = rMatches.every(m=>localOpen.includes(m.id))
                   return (
                     <div key={round} className={s.openGroup}>
-                      <div className={s.openGroupHeader} style={{borderLeftColor:phase==='grupos'?'#1DB954':'#E8324A'}}>
+                      <div className={s.openGroupHeader} style={{borderLeftColor:phase==='grupos'?'#1DB954':phase==='playoff'?'#E8324A':phase==='clasif'?'#A78BFA':'#F0B429'}}>
                         <span style={{fontWeight:700}}>{round}</span>
                         <button className={s.toggleAllBtn} onClick={()=>{
                           const ids = rMatches.map(m=>m.id)
