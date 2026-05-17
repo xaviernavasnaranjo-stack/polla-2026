@@ -779,7 +779,7 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
               <div key={key} className={s.champCard} style={{borderColor:color}}>
                 <div className={s.champCardLabel} style={{color}}>{label} <span style={{fontSize:11}}>+{pts}pts</span></div>
                 {hit && <div className={s.hitBadge} style={{marginBottom:4}}>+{pts} ✓</div>}
-                <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))}
+                <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))} disabled={!db.openMatches.includes(999)}
                   placeholder="Nombre del equipo..." className={s.champInput}/>
               </div>
             )
