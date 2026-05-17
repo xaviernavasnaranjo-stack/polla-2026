@@ -99,7 +99,7 @@ export default function Page() {
           <div className={s.brand}>
             <span className={s.brandIcon}>⚽</span>
             <div>
-              <div className={s.brandTitle}>POLLA MUNDIALISTA 2026</div>
+              <div className={s.brandTitle}>POLLA MUNDIALISTA 2026 · Navas Romero</div>
               <div className={s.brandSub}>FIFA World Cup · USA · Canada · Mexico</div>
             </div>
           </div>
