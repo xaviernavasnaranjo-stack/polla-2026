@@ -99,7 +99,7 @@ export default function Page() {
           <div className={s.brand}>
             <span className={s.brandIcon}>⚽</span>
             <div>
-              <div className={s.brandTitle}>POLLA MUNDIALISTA 2026 · Navas Romero</div>
+              <div className={s.brandTitle}>POLLA MUNDIALISTA 2026 · NAVAS ROMERO</div>
               <div className={s.brandSub}>FIFA World Cup · USA · Canada · Mexico</div>
             </div>
           </div>
@@ -660,6 +660,7 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
   }
 
   const saveChampPred = async () => {
+    if (!db.openMatches.includes(999)) return
     setSaving('champ')
     const existing = db.championPreds.find(c=>c.participant_id===participant.id)
     if (existing) await supabase.from('champion_predictions').update(localChamp).eq('id',existing.id)
@@ -703,16 +704,18 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
                 <div className={s.champCardLabel} style={{color}}>{label} <span style={{fontSize:11}}>+{pts}pts</span></div>
                 {hit && <div className={s.hitBadge} style={{marginBottom:4}}>+{pts} ✓</div>}
                 <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))}
+                  disabled={!db.openMatches.includes(999)}
                   placeholder="Nombre del equipo..." className={s.champInput}/>
               </div>
             )
           })}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12,marginTop:12}}>
-          <button className={s.btnPrimary} onClick={saveChampPred} disabled={saving==='champ'}>
-            {flash==='champ'?'✓ Guardado':saving==='champ'?'Guardando...':'💾 Guardar pronóstico'}
+          <button className={s.btnPrimary} onClick={saveChampPred} disabled={saving==='champ' || !db.openMatches.includes(999)}>
+            {flash==='champ'?'✓ Guardado':!db.openMatches.includes(999)?'🔒 Cerrado':saving==='champ'?'Guardando...':'💾 Guardar pronóstico'}
           </button>
           {flash==='champ' && <span style={{color:'#1DB954',fontSize:13}}>¡Pronóstico guardado!</span>}
+          {!db.openMatches.includes(999) && <span style={{color:'#E8324A',fontSize:12}}>El pronóstico de campeón está cerrado.</span>}
         </div>
       </div>
 
