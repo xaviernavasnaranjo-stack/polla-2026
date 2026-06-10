@@ -558,6 +558,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
+  // Only initialize ONCE when participant changes — not on every Realtime refresh
   useEffect(() => {
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => { lp[p.match_id]={home:p.home_score,away:p.away_score} })
@@ -565,7 +566,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
     const lc = {}
     db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => { lc[c.group_id]={first:c.first_place,second:c.second_place} })
     setLocalClassif(lc)
-  }, [db.groupPreds, db.classifiedPreds, participant.id])
+  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
@@ -575,7 +576,8 @@ function MisGruposTab({ db, participant, onRefresh }) {
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
     if (existing) await supabase.from('predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
     else await supabase.from('predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
-    await onRefresh(); setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
+    onRefresh() // fire and forget — don't await to avoid reinitializing local state
+    setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
   }
 
   const saveClasif = async (g) => {
@@ -719,13 +721,14 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
+  // Only initialize ONCE when participant changes — not on every Realtime refresh
   useEffect(() => {
     const lp = {}
     db.knockoutPreds.filter(p=>p.participant_id===participant.id).forEach(p=>{lp[p.match_id]={home:p.home_score,away:p.away_score}})
     setLocalPred(lp)
     const myChamp = db.championPreds.find(c=>c.participant_id===participant.id)||{}
     setLocalChamp({champion:myChamp.champion||'',runner_up:myChamp.runner_up||'',third:myChamp.third||''})
-  }, [db.knockoutPreds, db.championPreds, participant.id])
+  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     const lp = localPred[matchId]
@@ -736,7 +739,8 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
     const existing = db.knockoutPreds.find(p=>p.match_id===matchId && p.participant_id===participant.id)
     if (existing) await supabase.from('knockout_predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
     else await supabase.from('knockout_predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
-    await onRefresh(); setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
+    onRefresh() // fire and forget
+    setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
   }
 
   const saveChampPred = async () => {
