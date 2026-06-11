@@ -142,9 +142,13 @@ export default function Page() {
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
             {tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}
-            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
-            {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
+            <div style={{display:tab==='mis-grupos'&&participant?'block':'none'}}>
+              {participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
+            </div>
+            <div style={{display:tab==='mis-playoffs'&&participant?'block':'none'}}>
+              {participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
+            </div>
           </>
         )}
       </main>
