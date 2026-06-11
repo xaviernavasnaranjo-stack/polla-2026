@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   supabase, MATCHES, GROUPS, GROUP_TEAMS, GROUP_COLORS,
   KNOCKOUT_ROUNDS, KNOCKOUT_MATCHES,
@@ -557,29 +557,35 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [localClassif, setLocalClassif] = useState({})
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
+  const savingRef = React.useRef(false)
+  const localPredRef = React.useRef({})
 
-  // Initialize from DB when participant changes or DB loads
+  // Sync local state from DB, but never overwrite while user is actively saving
   useEffect(() => {
-    if (db.groupPreds.length === 0 && db.classifiedPreds.length === 0) return
+    if (savingRef.current) return // skip if save in progress
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => { lp[p.match_id]={home:p.home_score,away:p.away_score} })
-    setLocalPred(lp)
+    // Merge: keep any local edits that are newer than DB
+    const merged = {...lp, ...localPredRef.current}
+    setLocalPred(merged)
+    localPredRef.current = merged
     const lc = {}
     db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => { lc[c.group_id]={first:c.first_place,second:c.second_place} })
     setLocalClassif(lc)
-  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-depseslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
     const lp = localPred[matchId]
     if (!lp || lp.home===null || lp.away===null) return
+    savingRef.current = true
     setSaving(matchId)
-    // Save to DB
+    localPredRef.current = {...localPredRef.current, [matchId]: lp}
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
     if (existing) await supabase.from('predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
     else await supabase.from('predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
     setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
-    // Refresh DB in background — useEffect above will sync local state from fresh DB data
+    setTimeout(() => { savingRef.current = false }, 2000)
     onRefresh()
   }
 
@@ -724,15 +730,14 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
-  // Initialize from DB when participant changes or DB loads
+  // Only initialize ONCE when participant changes — not on every Realtime refresh
   useEffect(() => {
-    if (db.knockoutPreds.length === 0 && db.championPreds.length === 0) return
     const lp = {}
     db.knockoutPreds.filter(p=>p.participant_id===participant.id).forEach(p=>{lp[p.match_id]={home:p.home_score,away:p.away_score}})
     setLocalPred(lp)
     const myChamp = db.championPreds.find(c=>c.participant_id===participant.id)||{}
     setLocalChamp({champion:myChamp.champion||'',runner_up:myChamp.runner_up||'',third:myChamp.third||''})
-  }, [participant.id, db.knockoutPreds, db.championPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     const lp = localPred[matchId]
@@ -743,8 +748,8 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
     const existing = db.knockoutPreds.find(p=>p.match_id===matchId && p.participant_id===participant.id)
     if (existing) await supabase.from('knockout_predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
     else await supabase.from('knockout_predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
+    onRefresh() // fire and forget
     setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
-    onRefresh()
   }
 
   const saveChampPred = async () => {
