@@ -51,8 +51,6 @@ function useDB() {
     const tables = ['participants','match_results','classified_results',
       'open_matches','knockout_results','knockout_predictions',
       'champion_result','champion_predictions']
-    // 'predictions' and 'classified_predictions' excluded from Realtime
-    // to prevent flicker when saving — loaded manually via onRefresh()
     const channels = tables.map(t =>
       supabase.channel(`rt-${t}`).on('postgres_changes',
         {event:'*', schema:'public', table:t}, load).subscribe()
@@ -579,7 +577,8 @@ function MisGruposTab({ db, participant, onRefresh }) {
     })
     setLocalClassif(lc)
     setLoaded(true)
-  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Note: db.loading ensures we wait for initial data but don't re-sync on every save
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
@@ -592,10 +591,12 @@ function MisGruposTab({ db, participant, onRefresh }) {
     } else {
       await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
     }
-    await onRefresh() // confirm DB saved before showing success
+    // Update local state immediately with saved value (don't wait for DB sync)
+    setLocalPred(prev => ({...prev, [matchId]: lp}))
     setSaving(null)
     setFlash(matchId)
     setTimeout(() => setFlash(null), 1500)
+    onRefresh() // fire and forget - just to keep DB stats updated
   }
 
   const saveClasif = async (g) => {
