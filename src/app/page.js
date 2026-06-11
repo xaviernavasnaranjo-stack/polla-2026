@@ -563,7 +563,12 @@ function MisGruposTab({ db, participant, onRefresh }) {
   useEffect(() => {
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-      lp[p.match_id] = {home: p.home_score, away: p.away_score}
+      // Only load if both scores are valid numbers
+      if (p.home_score !== null && p.away_score !== null && 
+          p.home_score !== undefined && p.away_score !== undefined &&
+          !isNaN(p.home_score) && !isNaN(p.away_score)) {
+        lp[p.match_id] = {home: p.home_score, away: p.away_score}
+      }
     })
     setLocalPred(lp)
     const lc = {}
@@ -577,7 +582,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
     const lp = localPred[matchId]
-    if (!lp || lp.home === null || lp.away === null) return
+    if (!lp || lp.home === null || lp.home === undefined || lp.away === null || lp.away === undefined || isNaN(lp.home) || isNaN(lp.away)) return
     setSaving(matchId)
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
     if (existing) {
@@ -712,7 +717,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
                         className={s.scoreInput}/>
                       <button className={s.saveBtn}
                         onClick={()=>savePred(m.id)}
-                        disabled={saving===m.id||lp.home===null||lp.away===null}>
+                        disabled={saving===m.id||lp.home===null||lp.home===undefined||lp.away===null||lp.away===undefined}>
                         {saving===m.id?'...':flash===m.id?'✓':'💾'}
                       </button>
                     </div>
@@ -881,7 +886,7 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
                         className={s.scoreInput}/>
                       <button className={s.saveBtn}
                         onClick={()=>savePred(m.id)}
-                        disabled={saving===m.id||lp.home===null||lp.away===null}>
+                        disabled={saving===m.id||lp.home===null||lp.home===undefined||lp.away===null||lp.away===undefined}>
                         {saving===m.id?'...':flash===m.id?'✓':'💾'}
                       </button>
                     </div>
