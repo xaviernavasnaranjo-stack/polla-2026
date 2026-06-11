@@ -142,12 +142,8 @@ export default function Page() {
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
             {tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}
-            <div style={{display:tab==='mis-grupos'&&participant?'block':'none'}}>
-              {participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
-            </div>
-            <div style={{display:tab==='mis-playoffs'&&participant?'block':'none'}}>
-              {participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
-            </div>
+            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
+            {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
         )}
@@ -562,7 +558,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
-  // Reset and reload from DB when participant changes (handles re-login)
+  // Load from DB on mount and whenever DB updates
   useEffect(() => {
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
@@ -574,19 +570,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
       lc[c.group_id] = {first:c.first_place, second:c.second_place}
     })
     setLocalClassif(lc)
-  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync from DB only if local state is empty (handles slow initial load)
-  useEffect(() => {
-    setLocalPred(prev => {
-      if (Object.keys(prev).length > 0) return prev
-      const lp = {}
-      db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-        lp[p.match_id] = {home:p.home_score, away:p.away_score}
-      })
-      return lp
-    })
-  }, [db.groupPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
