@@ -559,9 +559,9 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [flash, setFlash]       = useState(null)
   const [loaded, setLoaded]     = useState(false)
 
-  // Load from DB when data is available - wait for db to have data before initializing
+  // Load from DB once on mount (component remounts on participant change due to key prop)
   useEffect(() => {
-    if (db.loading) return // DB still loading, wait
+    if (db.loading) return // wait for DB to finish loading
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
       if (p.home_score !== null && p.away_score !== null &&
@@ -577,7 +577,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
     })
     setLocalClassif(lc)
     setLoaded(true)
-  }, [participant.id, db.loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
@@ -590,10 +590,10 @@ function MisGruposTab({ db, participant, onRefresh }) {
     } else {
       await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
     }
+    await onRefresh() // confirm DB saved before showing success
     setSaving(null)
     setFlash(matchId)
     setTimeout(() => setFlash(null), 1500)
-    onRefresh()
   }
 
   const saveClasif = async (g) => {
