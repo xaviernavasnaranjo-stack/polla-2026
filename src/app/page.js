@@ -558,10 +558,12 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]     = useState(null)
   const [flash, setFlash]       = useState(null)
   const [loaded, setLoaded]     = useState(false)
+  const isSavingRef = React.useRef(false) // blocks useEffect during active save
 
-  // Load from DB once on mount (component remounts on participant change due to key prop)
+  // Sync from DB — skipped while a save is in progress to prevent flicker
   useEffect(() => {
-    if (db.loading) return // wait for DB to finish loading
+    if (db.loading) return
+    if (isSavingRef.current) return // skip if user just saved, wait for fresh data
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
       if (p.home_score !== null && p.away_score !== null &&
@@ -583,6 +585,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
     if (!db.openMatches.includes(matchId)) return
     const lp = localPred[matchId]
     if (!lp || lp.home === null || lp.home === undefined || lp.away === null || lp.away === undefined || isNaN(lp.home) || isNaN(lp.away)) return
+    isSavingRef.current = true // block useEffect from overwriting local state
     setSaving(matchId)
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
     if (existing) {
@@ -590,7 +593,8 @@ function MisGruposTab({ db, participant, onRefresh }) {
     } else {
       await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
     }
-    await onRefresh() // confirm DB saved before showing success
+    await onRefresh() // wait for DB to confirm
+    isSavingRef.current = false // allow useEffect to sync again
     setSaving(null)
     setFlash(matchId)
     setTimeout(() => setFlash(null), 1500)
