@@ -561,205 +561,33 @@ function MisGruposTab({ db, participant, onRefresh }) {
 
   // Load from DB once on mount (component remounts on participant change due to key prop)
   useEffect(() => {
-    if (db.loading) return // wait for DB to finish loading
-    const lp = {}
-    db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-      if (p.home_score !== null && p.away_score !== null &&
-          p.home_score !== undefined && p.away_score !== undefined &&
-          !isNaN(p.home_score) && !isNaN(p.away_score)) {
-        lp[p.match_id] = {home: p.home_score, away: p.away_score}
+    // Fetch directly from Supabase to ensure fresh data on every mount
+    const loadPreds = async () => {
+      const { data: myPreds } = await supabase
+        .from('predictions')
+        .select('*')
+        .eq('participant_id', participant.id)
+      if (myPreds) {
+        const lp = {}
+        myPreds.forEach(p => {
+          if (p.home_score !== null && p.away_score !== null) {
+            lp[p.match_id] = {home: p.home_score, away: p.away_score}
+          }
+        })
+        setLocalPred(lp)
       }
-    })
-    setLocalPred(lp)
-    const lc = {}
-    db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
-      lc[c.group_id] = {first: c.first_place, second: c.second_place}
-    })
-    setLocalClassif(lc)
-    setLoaded(true)
-  }, [participant.id, db.loading]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Note: db.loading ensures we wait for initial data but don't re-sync on every save
-
-  const savePred = async (matchId) => {
-    if (!db.openMatches.includes(matchId)) return
-    const lp = localPred[matchId]
-    if (!lp || lp.home === null || lp.home === undefined || lp.away === null || lp.away === undefined || isNaN(lp.home) || isNaN(lp.away)) return
-    setSaving(matchId)
-    const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
-    if (existing) {
-      await supabase.from('predictions').update({home_score: lp.home, away_score: lp.away}).eq('id', existing.id)
-    } else {
-      await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
+      const { data: myClassif } = await supabase
+        .from('classified_predictions')
+        .select('*')
+        .eq('participant_id', participant.id)
+      if (myClassif) {
+        const lc = {}
+        myClassif.forEach(c => { lc[c.group_id] = {first: c.first_place, second: c.second_place} })
+        setLocalClassif(lc)
+      }
+      setLoaded(true)
     }
-    // Update local state immediately so UI doesn't flicker
-    setLocalPred(prev => ({...prev, [matchId]: lp}))
-    // AWAIT refresh so db.groupPreds has the new value before user navigates away
-    await onRefresh()
-    setSaving(null)
-    setFlash(matchId)
-    setTimeout(() => setFlash(null), 1500)
-  }
-
-  const saveClasif = async (g) => {
-    const lc = localClassif[g]; if (!lc) return
-    if (!db.openMatches.includes(998)) return
-    setSaving(`c-${g}`)
-    const existing = db.classifiedPreds.find(c => c.group_id===g && c.participant_id===participant.id)
-    if (existing) {
-      await supabase.from('classified_predictions').update({first_place: lc.first, second_place: lc.second}).eq('id', existing.id)
-    } else {
-      await supabase.from('classified_predictions').insert({participant_id: participant.id, group_id: g, first_place: lc.first, second_place: lc.second})
-    }
-    await onRefresh()
-    setSaving(null)
-    setFlash(`c-${g}`)
-    setTimeout(() => setFlash(null), 1500)
-  }
-
-  const filtered = filter==='ALL' ? MATCHES : MATCHES.filter(m => m.group===filter)
-
-  const myGroupPts = MATCHES.reduce((sum, m) => {
-    const res  = db.groupResults.find(r => r.match_id===m.id)
-    const pred = db.groupPreds.find(p => p.match_id===m.id && p.participant_id===participant.id)
-    return sum + (calcGroupMatchPoints(res, pred) || 0)
-  }, 0)
-  const myClassifPts = calcClassifiedPoints(db.classifiedRes, db.classifiedPreds.filter(c => c.participant_id===participant.id))
-
-
-  return (
-    <div className={s.tabContent}>
-      <div className={s.pronHeader}>
-        <h2 className={s.sectionTitle}>📋 Mis Grupos</h2>
-        <div className={s.myPts}>
-          <span className={s.ptChip} style={{background:'#1E3A2A',color:'#1DB954',border:'1px solid #1DB954'}}>Partidos: {myGroupPts}</span>
-          <span className={s.ptChip} style={{background:'#2A1A3A',color:'#A78BFA',border:'1px solid #7C3AED'}}>Clasif: {myClassifPts}</span>
-          <span className={s.ptChip} style={{background:'#E8324A',color:'#fff',fontSize:15,padding:'7px 16px'}}>Subtotal: {myGroupPts+myClassifPts}</span>
-        </div>
-      </div>
-
-      {/* Classified */}
-      <div className={s.classifSection}>
-        <h3 className={s.classifTitle}>🏆 Clasificados por Grupo <span style={{color:'#A78BFA',fontSize:13}}>— 3 pts por cada acierto</span></h3>
-        <div className={s.classifGrid}>
-          {GROUPS.map(g => {
-            const teams = GROUP_TEAMS[g]
-            const lc    = localClassif[g]||{first:'',second:''}
-            const real  = db.classifiedRes.find(r=>r.group_id===g)
-            const pred  = db.classifiedPreds.find(c=>c.group_id===g && c.participant_id===participant.id)
-            const rt    = real ? [real.first_place,real.second_place].filter(Boolean).map(t=>t.toLowerCase()) : []
-            const hit1  = pred && rt.includes(pred.first_place?.toLowerCase())
-            const hit2  = pred && rt.includes(pred.second_place?.toLowerCase())
-            const gc    = GROUP_COLORS[g]
-            return (
-              <div key={g} className={s.classifCard} style={{borderColor:gc}}>
-                <div className={s.classifCardHeader} style={{background:gc}}>Grupo {g}</div>
-                <div className={s.classifCardBody}>
-                  {[['first','1°'],['second','2°']].map(([place,lbl]) => (
-                    <div key={place} className={s.classifRow}>
-                      <span className={s.placeLabel} style={{color:place==='first'?'#1DB954':'#2E6BE6'}}>{lbl}</span>
-                      <select value={lc[place]||''} onChange={e=>setLocalClassif(p=>({...p,[g]:{...lc,[place]:e.target.value}}))} className={s.classifSelect}>
-                        <option value="">— elegir —</option>
-                        {teams.map(t=><option key={t} value={t}>{t}</option>)}
-                      </select>
-                      {(place==='first'?hit1:hit2) && <span className={s.hitBadge}>+3</span>}
-                    </div>
-                  ))}
-                  <button className={s.classifSaveBtn} onClick={()=>saveClasif(g)} disabled={saving===`c-${g}` || !db.openMatches.includes(998)}
-                    style={{background:flash===`c-${g}`?'#1DB954':!db.openMatches.includes(998)?'#555':gc}}>
-                    {flash===`c-${g}`?'✓ Guardado':!db.openMatches.includes(998)?'🔒 Cerrado':saving===`c-${g}`?'...':'Guardar'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Match predictions */}
-      <div className={s.filterRow}>
-        {['ALL',...GROUPS].map(g => (
-          <button key={g} onClick={()=>setFilter(g)} className={s.filterBtn}
-            style={{background:filter===g?(g==='ALL'?'#E8324A':GROUP_COLORS[g]):'rgba(255,255,255,0.06)',
-              color:filter===g?'#fff':'#6B7A99',borderColor:filter===g?'transparent':'rgba(255,255,255,0.1)'}}>
-            {g==='ALL'?'Todos':`Grp ${g}`}
-          </button>
-        ))}
-      </div>
-      <div className={`${s.matchList} stagger`}>
-        {filtered.map(m => {
-          const open   = db.openMatches.includes(m.id)
-          const res    = db.groupResults.find(r=>r.match_id===m.id)
-          const myPred = db.groupPreds.find(p=>p.match_id===m.id && p.participant_id===participant.id)
-          const lp     = localPred[m.id]||{home:myPred?.home_score??null,away:myPred?.away_score??null}
-          const pts    = calcGroupMatchPoints(res, myPred)
-          const gc     = GROUP_COLORS[m.group]
-          return (
-            <div key={m.id} className={s.matchCard} style={{borderLeftColor:gc,opacity:!open&&!res?0.6:1}}>
-              <div className={s.matchMeta}>
-                <span className={s.groupTag} style={{background:gc}}>GRP {m.group}</span>
-                <span className={s.matchDate}>{m.date}</span>
-                {res && pts!==null && (
-                  <span className={s.ptsBadge} style={{background:pts===3?'rgba(29,185,84,.2)':pts===2?'rgba(46,107,230,.2)':'rgba(232,50,74,.2)',color:pts===3?'#1DB954':pts===2?'#6B9EFF':'#E8324A'}}>
-                    {pts===3?'⭐ +3 EXACTO':pts===2?'✓ +2 RESULT.':'✗ 0 pts'}
-                  </span>
-                )}
-                {!res && <span className={s.matchStatus} style={{background:open?'rgba(240,180,41,.12)':'rgba(107,122,153,.1)',color:open?'#F0B429':'#6B7A99'}}>{open?'🟡 Abierto':'🔒 Cerrado'}</span>}
-              </div>
-              <div className={s.matchRow}>
-                <div className={s.teamSide} style={{textAlign:'right'}}>{m.home}</div>
-                <div className={s.predBlock}>
-                  {open && !res ? (
-                    <div className={s.scoreEditor}>
-                      <input type="number" min="0" max="99" placeholder="—"
-                        value={lp.home!==null?lp.home:''}
-                        onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),home:v}}))}}
-                        className={s.scoreInput}/>
-                      <span className={s.scoreSep}>:</span>
-                      <input type="number" min="0" max="99" placeholder="—"
-                        value={lp.away!==null?lp.away:''}
-                        onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),away:v}}))}}
-                        className={s.scoreInput}/>
-                      <button className={s.saveBtn}
-                        onClick={()=>savePred(m.id)}
-                        disabled={saving===m.id||lp.home===null||lp.home===undefined||lp.away===null||lp.away===undefined}>
-                        {saving===m.id?'...':flash===m.id?'✓':'💾'}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={s.scoreDisplay}>
-                      <span className={s.scoreNum}>{lp.home!==null?lp.home:'—'}</span>
-                      <span className={s.scoreSep}>:</span>
-                      <span className={s.scoreNum}>{lp.away!==null?lp.away:'—'}</span>
-                    </div>
-                  )}
-                  {res && <div className={s.realScore}>Real: {res.home_score}:{res.away_score}</div>}
-                  {flash===m.id && <div className={s.savedFlash}>✓ Guardado</div>}
-                </div>
-                <div className={s.teamSide} style={{textAlign:'left'}}>{m.away}</div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ─── MIS PLAYOFFS TAB ─────────────────────────────────────────────────────────
-function MisPlayoffsTab({ db, participant, onRefresh }) {
-  const [activeRound, setActiveRound] = useState('r32')
-  const [localPred, setLocalPred]     = useState({})
-  const [localChamp, setLocalChamp]   = useState({})
-  const [saving, setSaving]   = useState(null)
-  const [flash, setFlash]     = useState(null)
-
-  // Only initialize ONCE when participant changes — not on every Realtime refresh
-  useEffect(() => {
-    const lp = {}
-    db.knockoutPreds.filter(p=>p.participant_id===participant.id).forEach(p=>{lp[p.match_id]={home:p.home_score,away:p.away_score}})
-    setLocalPred(lp)
-    const myChamp = db.championPreds.find(c=>c.participant_id===participant.id)||{}
-    setLocalChamp({champion:myChamp.champion||'',runner_up:myChamp.runner_up||'',third:myChamp.third||''})
+    loadPreds()
   }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
