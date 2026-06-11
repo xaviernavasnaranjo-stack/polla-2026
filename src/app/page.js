@@ -559,12 +559,12 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [flash, setFlash]       = useState(null)
   const [loaded, setLoaded]     = useState(false)
 
-  // Load from DB once on mount (component remounts on participant change due to key prop)
+  // Load from DB when data is available - wait for db to have data before initializing
   useEffect(() => {
+    if (db.loading) return // DB still loading, wait
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-      // Only load if both scores are valid numbers
-      if (p.home_score !== null && p.away_score !== null && 
+      if (p.home_score !== null && p.away_score !== null &&
           p.home_score !== undefined && p.away_score !== undefined &&
           !isNaN(p.home_score) && !isNaN(p.away_score)) {
         lp[p.match_id] = {home: p.home_score, away: p.away_score}
@@ -577,7 +577,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
     })
     setLocalClassif(lc)
     setLoaded(true)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
