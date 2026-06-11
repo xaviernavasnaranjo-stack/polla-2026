@@ -142,8 +142,8 @@ export default function Page() {
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
             {tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}
-            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
-            {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
+            {tab==='mis-grupos'  && participant && <MisGruposTab key={participant.id} db={db} participant={participant} onRefresh={load}/>}
+            {tab==='mis-playoffs'&& participant && <MisPlayoffsTab key={participant.id} db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
         )}
@@ -552,35 +552,43 @@ function PlayoffTab({ db, adminMode, onRefresh, participant }) {
 
 // ─── MIS GRUPOS TAB ───────────────────────────────────────────────────────────
 function MisGruposTab({ db, participant, onRefresh }) {
-  const [filter, setFilter]   = useState('ALL')
-  const [localPred, setLocalPred]     = useState({})
+  const [filter, setFilter]     = useState('ALL')
+  const [localPred, setLocalPred]       = useState({})
   const [localClassif, setLocalClassif] = useState({})
-  const [saving, setSaving]   = useState(null)
-  const [flash, setFlash]     = useState(null)
+  const [saving, setSaving]     = useState(null)
+  const [flash, setFlash]       = useState(null)
+  const [loaded, setLoaded]     = useState(false)
 
-  // Load from DB on mount and whenever DB updates
+  // Load from DB once on mount (component remounts on participant change due to key prop)
   useEffect(() => {
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-      lp[p.match_id] = {home:p.home_score, away:p.away_score}
+      lp[p.match_id] = {home: p.home_score, away: p.away_score}
     })
     setLocalPred(lp)
     const lc = {}
     db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
-      lc[c.group_id] = {first:c.first_place, second:c.second_place}
+      lc[c.group_id] = {first: c.first_place, second: c.second_place}
     })
     setLocalClassif(lc)
-  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+    setLoaded(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
     const lp = localPred[matchId]
-    if (!lp || lp.home===null || lp.away===null) return
+    if (!lp || lp.home === null || lp.away === null) return
     setSaving(matchId)
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
-    if (existing) await supabase.from('predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
-    else await supabase.from('predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
-    setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
+    if (existing) {
+      await supabase.from('predictions').update({home_score: lp.home, away_score: lp.away}).eq('id', existing.id)
+    } else {
+      await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
+    }
+    setSaving(null)
+    setFlash(matchId)
+    setTimeout(() => setFlash(null), 1500)
+    onRefresh()
   }
 
   const saveClasif = async (g) => {
@@ -588,19 +596,26 @@ function MisGruposTab({ db, participant, onRefresh }) {
     if (!db.openMatches.includes(998)) return
     setSaving(`c-${g}`)
     const existing = db.classifiedPreds.find(c => c.group_id===g && c.participant_id===participant.id)
-    if (existing) await supabase.from('classified_predictions').update({first_place:lc.first,second_place:lc.second}).eq('id',existing.id)
-    else await supabase.from('classified_predictions').insert({participant_id:participant.id,group_id:g,first_place:lc.first,second_place:lc.second})
-    await onRefresh(); setSaving(null); setFlash(`c-${g}`); setTimeout(()=>setFlash(null),1500)
+    if (existing) {
+      await supabase.from('classified_predictions').update({first_place: lc.first, second_place: lc.second}).eq('id', existing.id)
+    } else {
+      await supabase.from('classified_predictions').insert({participant_id: participant.id, group_id: g, first_place: lc.first, second_place: lc.second})
+    }
+    await onRefresh()
+    setSaving(null)
+    setFlash(`c-${g}`)
+    setTimeout(() => setFlash(null), 1500)
   }
 
   const filtered = filter==='ALL' ? MATCHES : MATCHES.filter(m => m.group===filter)
 
-  const myGroupPts = MATCHES.reduce((sum,m) => {
-    const res = db.groupResults.find(r=>r.match_id===m.id)
-    const pred= db.groupPreds.find(p=>p.match_id===m.id && p.participant_id===participant.id)
-    return sum + (calcGroupMatchPoints(res,pred)||0)
-  },0)
-  const myClassifPts = calcClassifiedPoints(db.classifiedRes, db.classifiedPreds.filter(c=>c.participant_id===participant.id))
+  const myGroupPts = MATCHES.reduce((sum, m) => {
+    const res  = db.groupResults.find(r => r.match_id===m.id)
+    const pred = db.groupPreds.find(p => p.match_id===m.id && p.participant_id===participant.id)
+    return sum + (calcGroupMatchPoints(res, pred) || 0)
+  }, 0)
+  const myClassifPts = calcClassifiedPoints(db.classifiedRes, db.classifiedPreds.filter(c => c.participant_id===participant.id))
+
 
   return (
     <div className={s.tabContent}>
