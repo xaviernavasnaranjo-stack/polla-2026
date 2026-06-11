@@ -142,13 +142,13 @@ export default function Page() {
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
             {tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}
-            {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
             <div style={{display:tab==='mis-grupos'&&participant?'block':'none'}}>
               {participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
             </div>
             <div style={{display:tab==='mis-playoffs'&&participant?'block':'none'}}>
               {participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             </div>
+            {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
         )}
       </main>
@@ -574,7 +574,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
       lc[c.group_id] = {first:c.first_place, second:c.second_place}
     })
     setLocalClassif(lc)
-  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
