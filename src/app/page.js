@@ -562,7 +562,21 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
-  // Initialize from DB when local state is empty (fresh mount or re-login)
+  // Reset and reload from DB when participant changes (handles re-login)
+  useEffect(() => {
+    const lp = {}
+    db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
+      lp[p.match_id] = {home:p.home_score, away:p.away_score}
+    })
+    setLocalPred(lp)
+    const lc = {}
+    db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
+      lc[c.group_id] = {first:c.first_place, second:c.second_place}
+    })
+    setLocalClassif(lc)
+  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync from DB only if local state is empty (handles slow initial load)
   useEffect(() => {
     setLocalPred(prev => {
       if (Object.keys(prev).length > 0) return prev
@@ -572,15 +586,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
       })
       return lp
     })
-    setLocalClassif(prev => {
-      if (Object.keys(prev).length > 0) return prev
-      const lc = {}
-      db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
-        lc[c.group_id] = {first:c.first_place, second:c.second_place}
-      })
-      return lc
-    })
-  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [db.groupPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
