@@ -591,12 +591,13 @@ function MisGruposTab({ db, participant, onRefresh }) {
     } else {
       await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
     }
-    // Update local state immediately with saved value (don't wait for DB sync)
+    // Update local state immediately so UI doesn't flicker
     setLocalPred(prev => ({...prev, [matchId]: lp}))
+    // AWAIT refresh so db.groupPreds has the new value before user navigates away
+    await onRefresh()
     setSaving(null)
     setFlash(matchId)
     setTimeout(() => setFlash(null), 1500)
-    onRefresh() // fire and forget - just to keep DB stats updated
   }
 
   const saveClasif = async (g) => {
