@@ -562,19 +562,25 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]   = useState(null)
   const [flash, setFlash]     = useState(null)
 
-  // Initialize from DB when component mounts or participant changes
+  // Initialize from DB when local state is empty (fresh mount or re-login)
   useEffect(() => {
-    const lp = {}
-    db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-      lp[p.match_id] = {home:p.home_score, away:p.away_score}
+    setLocalPred(prev => {
+      if (Object.keys(prev).length > 0) return prev
+      const lp = {}
+      db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
+        lp[p.match_id] = {home:p.home_score, away:p.away_score}
+      })
+      return lp
     })
-    setLocalPred(lp)
-    const lc = {}
-    db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
-      lc[c.group_id] = {first:c.first_place, second:c.second_place}
+    setLocalClassif(prev => {
+      if (Object.keys(prev).length > 0) return prev
+      const lc = {}
+      db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
+        lc[c.group_id] = {first:c.first_place, second:c.second_place}
+      })
+      return lc
     })
-    setLocalClassif(lc)
-  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
@@ -693,12 +699,17 @@ function MisGruposTab({ db, participant, onRefresh }) {
                       <input type="number" min="0" max="99" placeholder="—"
                         value={lp.home!==null?lp.home:''}
                         onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),home:v}}))}}
-                        onBlur={()=>savePred(m.id)} className={s.scoreInput}/>
+                        className={s.scoreInput}/>
                       <span className={s.scoreSep}>:</span>
                       <input type="number" min="0" max="99" placeholder="—"
                         value={lp.away!==null?lp.away:''}
                         onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),away:v}}))}}
-                        onBlur={()=>savePred(m.id)} className={s.scoreInput}/>
+                        className={s.scoreInput}/>
+                      <button className={s.saveBtn}
+                        onClick={()=>savePred(m.id)}
+                        disabled={saving===m.id||lp.home===null||lp.away===null}>
+                        {saving===m.id?'...':flash===m.id?'✓':'💾'}
+                      </button>
                     </div>
                   ) : (
                     <div className={s.scoreDisplay}>
@@ -857,12 +868,17 @@ function MisPlayoffsTab({ db, participant, onRefresh }) {
                       <input type="number" min="0" max="99" placeholder="—"
                         value={lp.home!==null?lp.home:''}
                         onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),home:v}}))}}
-                        onBlur={()=>savePred(m.id)} className={s.scoreInput}/>
+                        className={s.scoreInput}/>
                       <span className={s.scoreSep}>:</span>
                       <input type="number" min="0" max="99" placeholder="—"
                         value={lp.away!==null?lp.away:''}
                         onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),away:v}}))}}
-                        onBlur={()=>savePred(m.id)} className={s.scoreInput}/>
+                        className={s.scoreInput}/>
+                      <button className={s.saveBtn}
+                        onClick={()=>savePred(m.id)}
+                        disabled={saving===m.id||lp.home===null||lp.away===null}>
+                        {saving===m.id?'...':flash===m.id?'✓':'💾'}
+                      </button>
                     </div>
                   ) : (
                     <div className={s.scoreDisplay}>
