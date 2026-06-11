@@ -48,9 +48,11 @@ function useDB() {
 
   // Realtime subscriptions
   useEffect(() => {
-    const tables = ['participants','match_results','predictions','classified_results',
-      'classified_predictions','open_matches','knockout_results','knockout_predictions',
+    const tables = ['participants','match_results','classified_results',
+      'open_matches','knockout_results','knockout_predictions',
       'champion_result','champion_predictions']
+    // 'predictions' and 'classified_predictions' excluded from Realtime
+    // to prevent flicker when saving — loaded manually via onRefresh()
     const channels = tables.map(t =>
       supabase.channel(`rt-${t}`).on('postgres_changes',
         {event:'*', schema:'public', table:t}, load).subscribe()
@@ -558,12 +560,10 @@ function MisGruposTab({ db, participant, onRefresh }) {
   const [saving, setSaving]     = useState(null)
   const [flash, setFlash]       = useState(null)
   const [loaded, setLoaded]     = useState(false)
-  const isSavingRef = React.useRef(false) // blocks useEffect during active save
 
-  // Sync from DB — skipped while a save is in progress to prevent flicker
+  // Load from DB once on mount (component remounts on participant change due to key prop)
   useEffect(() => {
-    if (db.loading) return
-    if (isSavingRef.current) return // skip if user just saved, wait for fresh data
+    if (db.loading) return // wait for DB to finish loading
     const lp = {}
     db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
       if (p.home_score !== null && p.away_score !== null &&
@@ -585,7 +585,6 @@ function MisGruposTab({ db, participant, onRefresh }) {
     if (!db.openMatches.includes(matchId)) return
     const lp = localPred[matchId]
     if (!lp || lp.home === null || lp.home === undefined || lp.away === null || lp.away === undefined || isNaN(lp.home) || isNaN(lp.away)) return
-    isSavingRef.current = true // block useEffect from overwriting local state
     setSaving(matchId)
     const existing = db.groupPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
     if (existing) {
@@ -593,8 +592,7 @@ function MisGruposTab({ db, participant, onRefresh }) {
     } else {
       await supabase.from('predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
     }
-    await onRefresh() // wait for DB to confirm
-    isSavingRef.current = false // allow useEffect to sync again
+    await onRefresh() // confirm DB saved before showing success
     setSaving(null)
     setFlash(matchId)
     setTimeout(() => setFlash(null), 1500)
