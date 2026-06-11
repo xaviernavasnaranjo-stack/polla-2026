@@ -69,8 +69,6 @@ export default function Page() {
   const [adminMode, setAdminMode]     = useState(false)
   const [showPin, setShowPin]         = useState(false)
   const [showRegister, setShowRegister] = useState(false)
-  const [predCache, setPredCache] = useState({})       // persists across tab changes
-  const [classifCache, setClassifCache] = useState({}) // persists across tab changes
 
   useEffect(() => {
     const saved = localStorage.getItem('polla_participant')
@@ -144,7 +142,7 @@ export default function Page() {
             {tab==='grupos'      && <GruposTab db={db} adminMode={adminMode} onRefresh={load}/>}
             {tab==='playoff'     && <PlayoffTab db={db} adminMode={adminMode} onRefresh={load} participant={participant}/>}
             {tab==='grupos-clasif' && <ClasificadosTab db={db} adminMode={adminMode} onRefresh={load}/>}
-            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load} predCache={predCache} setPredCache={setPredCache} classifCache={classifCache} setClassifCache={setClassifCache}/>}
+            {tab==='mis-grupos'  && participant && <MisGruposTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='mis-playoffs'&& participant && <MisPlayoffsTab db={db} participant={participant} onRefresh={load}/>}
             {tab==='admin'       && adminMode && <AdminTab db={db} leaderboard={leaderboard} onRefresh={load}/>}
           </>
@@ -553,41 +551,26 @@ function PlayoffTab({ db, adminMode, onRefresh, participant }) {
 }
 
 // ─── MIS GRUPOS TAB ───────────────────────────────────────────────────────────
-function MisGruposTab({ db, participant, onRefresh, predCache, setPredCache, classifCache, setClassifCache }) {
-  const [filter, setFilter] = useState('ALL')
-  const [saving, setSaving] = useState(null)
-  const [flash, setFlash]   = useState(null)
+function MisGruposTab({ db, participant, onRefresh }) {
+  const [filter, setFilter]   = useState('ALL')
+  const [localPred, setLocalPred]     = useState({})
+  const [localClassif, setLocalClassif] = useState({})
+  const [saving, setSaving]   = useState(null)
+  const [flash, setFlash]     = useState(null)
 
-  // Use cache from parent (survives tab changes) merged with DB data
-  const localPred   = predCache
-  const localClassif = classifCache
-
-  const setLocalPred = (updater) => {
-    setPredCache(prev => typeof updater === 'function' ? updater(prev) : updater)
-  }
-  const setLocalClassif = (updater) => {
-    setClassifCache(prev => typeof updater === 'function' ? updater(prev) : updater)
-  }
-
-  // Initialize cache from DB only if cache is empty (first load) or participant changes
+  // Initialize from DB when component mounts or participant changes
   useEffect(() => {
-    setPredCache(prev => {
-      if (Object.keys(prev).length > 0) return prev // cache already populated, keep it
-      const lp = {}
-      db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
-        lp[p.match_id] = {home:p.home_score, away:p.away_score}
-      })
-      return lp
+    const lp = {}
+    db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
+      lp[p.match_id] = {home:p.home_score, away:p.away_score}
     })
-    setClassifCache(prev => {
-      if (Object.keys(prev).length > 0) return prev
-      const lc = {}
-      db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
-        lc[c.group_id] = {first:c.first_place, second:c.second_place}
-      })
-      return lc
+    setLocalPred(lp)
+    const lc = {}
+    db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
+      lc[c.group_id] = {first:c.first_place, second:c.second_place}
     })
-  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    setLocalClassif(lc)
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     if (!db.openMatches.includes(matchId)) return
@@ -598,7 +581,6 @@ function MisGruposTab({ db, participant, onRefresh, predCache, setPredCache, cla
     if (existing) await supabase.from('predictions').update({home_score:lp.home,away_score:lp.away}).eq('id',existing.id)
     else await supabase.from('predictions').insert({participant_id:participant.id,match_id:matchId,home_score:lp.home,away_score:lp.away})
     setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
-    onRefresh()
   }
 
   const saveClasif = async (g) => {
