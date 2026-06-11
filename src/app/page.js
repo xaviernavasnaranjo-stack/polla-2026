@@ -561,34 +561,20 @@ function MisGruposTab({ db, participant, onRefresh }) {
 
   // Load from DB once on mount (component remounts on participant change due to key prop)
   useEffect(() => {
-    // Fetch directly from Supabase to ensure fresh data on every mount
-    const loadPreds = async () => {
-      const { data: myPreds } = await supabase
-        .from('predictions')
-        .select('*')
-        .eq('participant_id', participant.id)
-      if (myPreds) {
-        const lp = {}
-        myPreds.forEach(p => {
-          if (p.home_score !== null && p.away_score !== null) {
-            lp[p.match_id] = {home: p.home_score, away: p.away_score}
-          }
-        })
-        setLocalPred(lp)
+    const lp = {}
+    db.groupPreds.filter(p => p.participant_id===participant.id).forEach(p => {
+      if (p.home_score !== null && p.away_score !== null) {
+        lp[p.match_id] = {home: p.home_score, away: p.away_score}
       }
-      const { data: myClassif } = await supabase
-        .from('classified_predictions')
-        .select('*')
-        .eq('participant_id', participant.id)
-      if (myClassif) {
-        const lc = {}
-        myClassif.forEach(c => { lc[c.group_id] = {first: c.first_place, second: c.second_place} })
-        setLocalClassif(lc)
-      }
-      setLoaded(true)
-    }
-    loadPreds()
-  }, [participant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    })
+    setLocalPred(lp)
+    const lc = {}
+    db.classifiedPreds.filter(c => c.participant_id===participant.id).forEach(c => {
+      lc[c.group_id] = {first: c.first_place, second: c.second_place}
+    })
+    setLocalClassif(lc)
+    setLoaded(true)
+  }, [participant.id, db.groupPreds, db.classifiedPreds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePred = async (matchId) => {
     const lp = localPred[matchId]
@@ -719,6 +705,177 @@ function MisGruposTab({ db, participant, onRefresh }) {
                       <button className={s.saveBtn}
                         onClick={()=>savePred(m.id)}
                         disabled={saving===m.id||lp.home===null||lp.home===undefined||lp.away===null||lp.away===undefined}>
+                        {saving===m.id?'...':flash===m.id?'✓':'💾'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={s.scoreDisplay}>
+                      <span className={s.scoreNum}>{lp.home!==null?lp.home:'—'}</span>
+                      <span className={s.scoreSep}>:</span>
+                      <span className={s.scoreNum}>{lp.away!==null?lp.away:'—'}</span>
+                    </div>
+                  )}
+                  {played && <div className={s.realScore}>Real: {res.home_score}:{res.away_score}</div>}
+                  {flash===m.id && <div className={s.savedFlash}>✓ Guardado</div>}
+                </div>
+                <div className={s.teamSide} style={{textAlign:'left',color:!aTeam?'var(--muted)':'var(--text)',fontStyle:!aTeam?'italic':'normal',fontSize:!aTeam?13:15}}>
+                  {aTeam||m.label.split(' vs ')[1]}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+
+// ─── MIS PLAYOFFS TAB ─────────────────────────────────────────────────────────
+function MisPlayoffsTab({ db, participant, onRefresh }) {
+  const [activeRound, setActiveRound] = useState('r32')
+  const [localPred, setLocalPred]     = useState({})
+  const [localChamp, setLocalChamp]   = useState({})
+  const [saving, setSaving]   = useState(null)
+  const [flash, setFlash]     = useState(null)
+
+  useEffect(() => {
+    const lp = {}
+    db.knockoutPreds.filter(p=>p.participant_id===participant.id).forEach(p=>{
+      if (p.home_score !== null && p.away_score !== null) {
+        lp[p.match_id]={home:p.home_score,away:p.away_score}
+      }
+    })
+    setLocalPred(lp)
+    const myChamp = db.championPreds.find(c=>c.participant_id===participant.id)||{}
+    setLocalChamp({champion:myChamp.champion||'',runner_up:myChamp.runner_up||'',third:myChamp.third||''})
+  }, [participant.id, db.knockoutPreds, db.championPreds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const savePred = async (matchId) => {
+    const lp = localPred[matchId]
+    if (!lp || lp.home === null || lp.away === null) return
+    if (!db.openMatches.includes(matchId)) return
+    setSaving(matchId)
+    const existing = db.knockoutPreds.find(p => p.match_id===matchId && p.participant_id===participant.id)
+    if (existing) await supabase.from('knockout_predictions').update({home_score: lp.home, away_score: lp.away}).eq('id', existing.id)
+    else await supabase.from('knockout_predictions').insert({participant_id: participant.id, match_id: matchId, home_score: lp.home, away_score: lp.away})
+    setLocalPred(prev => ({...prev, [matchId]: lp}))
+    await onRefresh()
+    setSaving(null); setFlash(matchId); setTimeout(()=>setFlash(null),1500)
+  }
+
+  const saveChampPred = async () => {
+    if (!db.openMatches.includes(999)) return
+    setSaving('champ')
+    const existing = db.championPreds.find(c=>c.participant_id===participant.id)
+    if (existing) await supabase.from('champion_predictions').update(localChamp).eq('id',existing.id)
+    else await supabase.from('champion_predictions').insert({...localChamp, participant_id: participant.id})
+    await onRefresh()
+    setSaving(null); setFlash('champ'); setTimeout(()=>setFlash(null),2000)
+  }
+
+  const roundMatches = KNOCKOUT_MATCHES.filter(m=>m.round===activeRound)
+  const myKoPts = KNOCKOUT_MATCHES.reduce((sum,m) => {
+    const res = db.knockoutResults.find(r=>r.match_id===m.id)
+    const pred= db.knockoutPreds.find(p=>p.match_id===m.id && p.participant_id===participant.id)
+    return sum + (calcKnockoutMatchPoints(res,pred)||0)
+  },0)
+  const myChampBonus = calcChampionPoints(db.championResult, db.championPreds.find(c=>c.participant_id===participant.id))
+
+  return (
+    <div className={s.tabContent}>
+      <div className={s.pronHeader}>
+        <h2 className={s.sectionTitle}>🎯 Mis Playoffs</h2>
+        <div className={s.myPts}>
+          <span className={s.ptChip} style={{background:'#1A2A3A',color:'#4A9EFF',border:'1px solid #2E6BE6'}}>Playoff: {myKoPts}</span>
+          <span className={s.ptChip} style={{background:'#2A1F0A',color:'#F0B429',border:'1px solid #F0B429'}}>Bonus: {myChampBonus.total}</span>
+          <span className={s.ptChip} style={{background:'#E8324A',color:'#fff',fontSize:15,padding:'7px 16px'}}>Subtotal: {myKoPts+myChampBonus.total}</span>
+        </div>
+      </div>
+
+      <div className={s.champSection}>
+        <div className={s.champTitle}>🏆 Pronóstico Campeón <span style={{color:'var(--muted)',fontSize:13,fontWeight:400}}>— Guarda antes del inicio de la Final</span></div>
+        <div className={s.champGrid}>
+          {[
+            {key:'champion', label:'🥇 Campeón', pts:20, color:'#F0B429'},
+            {key:'runner_up', label:'🥈 Subcampeón', pts:10, color:'#C0C0C0'},
+            {key:'third', label:'🥉 Tercer lugar', pts:5, color:'#CD7F32'},
+          ].map(({key,label,pts,color}) => {
+            const champRes = db.championResult||{}
+            const hit = champRes[key] && localChamp[key] && champRes[key].toLowerCase()===localChamp[key].toLowerCase()
+            return (
+              <div key={key} className={s.champCard} style={{borderColor:color}}>
+                <div className={s.champCardLabel} style={{color}}>{label} <span style={{fontSize:11}}>+{pts}pts</span></div>
+                {hit && <div className={s.hitBadge} style={{marginBottom:4}}>+{pts} ✓</div>}
+                <input value={localChamp[key]||''} onChange={e=>setLocalChamp(p=>({...p,[key]:e.target.value}))}
+                  disabled={!db.openMatches.includes(999)}
+                  placeholder="Nombre del equipo..." className={s.champInput}/>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginTop:12}}>
+          <button className={s.btnPrimary} onClick={saveChampPred} disabled={saving==='champ' || !db.openMatches.includes(999)}>
+            {flash==='champ'?'✓ Guardado':!db.openMatches.includes(999)?'🔒 Cerrado':saving==='champ'?'Guardando...':'💾 Guardar pronóstico'}
+          </button>
+          {!db.openMatches.includes(999) && <span style={{color:'#E8324A',fontSize:12}}>El pronóstico de campeón está cerrado.</span>}
+        </div>
+      </div>
+
+      <div className={s.filterRow}>
+        {KNOCKOUT_ROUNDS.map(r => (
+          <button key={r.id} onClick={()=>setActiveRound(r.id)} className={s.filterBtn}
+            style={{background:activeRound===r.id?'#E8324A':'rgba(255,255,255,0.06)',
+              color:activeRound===r.id?'#fff':'#6B7A99',borderColor:activeRound===r.id?'transparent':'rgba(255,255,255,0.1)'}}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={`${s.matchList} stagger`}>
+        {roundMatches.map(m => {
+          const open   = db.openMatches.includes(m.id)
+          const res    = db.knockoutResults.find(r=>r.match_id===m.id)
+          const myPred = db.knockoutPreds.find(p=>p.match_id===m.id && p.participant_id===participant.id)
+          const lp     = localPred[m.id]||{home:myPred?.home_score??null,away:myPred?.away_score??null}
+          const pts    = calcKnockoutMatchPoints(res, myPred)
+          const roundColor = {r32:'#6A1B9A',r16:'#0277BD',qf:'#00695C',sf:'#C62828',f:'#F57F17',tp:'#4E342E'}[m.round]||'#555'
+          const hTeam  = res?.home_team || ''
+          const aTeam  = res?.away_team || ''
+          const played = res && res.home_score!==null && res.away_score!==null
+
+          return (
+            <div key={m.id} className={s.matchCard} style={{borderLeftColor:roundColor,opacity:!open&&!res?0.55:1}}>
+              <div className={s.matchMeta}>
+                <span className={s.groupTag} style={{background:roundColor}}>
+                  {KNOCKOUT_ROUNDS.find(r=>r.id===m.round)?.label}
+                </span>
+                <span className={s.matchDate}>{m.date} · {m.venue}</span>
+                {played && pts!==null && (
+                  <span className={s.ptsBadge} style={{background:pts===5?'rgba(29,185,84,.2)':pts===3?'rgba(46,107,230,.2)':'rgba(232,50,74,.2)',color:pts===5?'#1DB954':pts===3?'#6B9EFF':'#E8324A'}}>
+                    {pts===5?'⭐ +5 EXACTO':pts===3?'✓ +3 RESULT.':'✗ 0 pts'}
+                  </span>
+                )}
+                {!played && <span className={s.matchStatus} style={{background:open?'rgba(240,180,41,.12)':'rgba(107,122,153,.1)',color:open?'#F0B429':'#6B7A99'}}>{open?'🟡 Abierto':'🔒 Cerrado'}</span>}
+              </div>
+              <div className={s.matchRow}>
+                <div className={s.teamSide} style={{textAlign:'right',color:!hTeam?'var(--muted)':'var(--text)',fontStyle:!hTeam?'italic':'normal',fontSize:!hTeam?13:15}}>
+                  {hTeam||m.label.split(' vs ')[0]}
+                </div>
+                <div className={s.predBlock}>
+                  {open && !played ? (
+                    <div className={s.scoreEditor}>
+                      <input type="number" min="0" max="99" placeholder="—"
+                        value={lp.home!==null?lp.home:''}
+                        onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),home:v}}))}}
+                        className={s.scoreInput}/>
+                      <span className={s.scoreSep}>:</span>
+                      <input type="number" min="0" max="99" placeholder="—"
+                        value={lp.away!==null?lp.away:''}
+                        onChange={e=>{const v=e.target.value===''?null:+e.target.value; setLocalPred(p=>({...p,[m.id]:{...(p[m.id]||{}),away:v}}))}}
+                        className={s.scoreInput}/>
+                      <button className={s.saveBtn} onClick={()=>savePred(m.id)}
+                        disabled={saving===m.id||lp.home===null||lp.away===null}>
                         {saving===m.id?'...':flash===m.id?'✓':'💾'}
                       </button>
                     </div>
