@@ -25,14 +25,14 @@ function useDB() {
     ] = await Promise.all([
       supabase.from('participants').select('*').order('created_at'),
       supabase.from('match_results').select('*'),
-      supabase.from('predictions').select('*'),
+      supabase.from('predictions').select('*').limit(5000),
       supabase.from('classified_results').select('*'),
-      supabase.from('classified_predictions').select('*'),
+      supabase.from('classified_predictions').select('*').limit(5000),
       supabase.from('open_matches').select('match_id'),
       supabase.from('knockout_results').select('*'),
-      supabase.from('knockout_predictions').select('*'),
+      supabase.from('knockout_predictions').select('*').limit(5000),
       supabase.from('champion_result').select('*').order('updated_at', {ascending:false}).limit(1),
-      supabase.from('champion_predictions').select('*'),
+      supabase.from('champion_predictions').select('*').limit(5000),
     ])
     setDb({
       participants: parts||[], groupResults: gr||[], groupPreds: gp||[],
