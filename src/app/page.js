@@ -25,14 +25,30 @@ function useDB() {
     ] = await Promise.all([
       supabase.from('participants').select('*').order('created_at'),
       supabase.from('match_results').select('*'),
-      supabase.from('predictions').select('*').range(0, 4999),
+      (async () => {
+        const chunks = await Promise.all([
+          supabase.from('predictions').select('*').range(0, 999),
+          supabase.from('predictions').select('*').range(1000, 1999),
+          supabase.from('predictions').select('*').range(2000, 2999),
+          supabase.from('predictions').select('*').range(3000, 3999),
+          supabase.from('predictions').select('*').range(4000, 4999),
+        ])
+        return { data: chunks.flatMap(c => c.data || []) }
+      })(),
       supabase.from('classified_results').select('*'),
-      supabase.from('classified_predictions').select('*').range(0, 4999),
+      (async () => {
+        const chunks = await Promise.all([
+          supabase.from('classified_predictions').select('*').range(0, 999),
+          supabase.from('classified_predictions').select('*').range(1000, 1999),
+          supabase.from('classified_predictions').select('*').range(2000, 2999),
+        ])
+        return { data: chunks.flatMap(c => c.data || []) }
+      })(),
       supabase.from('open_matches').select('match_id'),
       supabase.from('knockout_results').select('*'),
-      supabase.from('knockout_predictions').select('*').range(0, 4999),
+      supabase.from('knockout_predictions').select('*').limit(5000),
       supabase.from('champion_result').select('*').order('updated_at', {ascending:false}).limit(1),
-      supabase.from('champion_predictions').select('*').range(0, 4999),
+      supabase.from('champion_predictions').select('*').limit(5000),
     ])
     setDb({
       participants: parts||[], groupResults: gr||[], groupPreds: gp||[],
